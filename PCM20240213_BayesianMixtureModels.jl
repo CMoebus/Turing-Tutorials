@@ -19,7 +19,7 @@ md"
 ===================================================================================
 #### [Bayesian Mixture Models](https://turinglang.org/v0.30/tutorials/01-gaussian-mixture-model/)
 ##### file: PCM20240213\_BayesianMixtureModels.jl
-##### Julia/Pluto.jl-code (1.10.1/19.36) by PCM *** 2024/03/09 ***
+##### Julia/Pluto.jl-code (1.10.1/19.36) by PCM *** 2024/03/10 ***
 ===================================================================================
 "
 
@@ -31,9 +31,10 @@ In contrast to the original in the Turing.jl tutorial we modified some features:
 
 - *Unconstrained* selection of *generative centroids* in $\mathbf x \in \mathbb R^2$ instead of $\mathbf x \in \mathbb R^1$. This means that we allow $D \cdot K$ parameters $\mu$ in our model instead of only $K$ as in the original model. There generative centroids could only lay on a line of 45 degrees inclination.
 - Increased $N$: we estimate membership parameters $k[i]\;;\; i=1,...,N$ for $N=300$ instead of $N=60$
-- Introduction of a new variance parameter $\sigma^2$ to allow a more flexible variance-covariance matrix $\sigma2 \cdot \mathbf I$ increasing cluster overlap at the same time
-- Estimation of posterior cluster centroids
-- Cluster weights with unequal sizes $N$s of membership  
+- Introduction of a new variance parameter $\sigma^2$ to allow a more flexible variance-covariance matrix $\sigma2 \cdot \mathbf I$. This has three effects. First, the variance of the data generating process need not be known as was the case in the original. Second, we allow varying degrees of cluster overlap in the data. Third, in combination with the parameter vector $\mathbf w$ clusters may have different variance-covarianve matrix $\sigma_{kk}\;;\;kk=1,...,K$.
+- Estimation and display of posterior cluster centroids
+- Cluster-specific mixture weights $w_{kk}\;;\;kk=1,...,K$ to model different attractiveness of clusters. In combination with the variance parameter $\sigma^2$ this makes cluster-specific variances possible.
+- Using the *PG-MCMC*-algorithm for the estimation of *all* parameters. This is due to the brittleness of the originally proposed combined *Gibbs(PG(...), HMC(...))*. The latter often ran into interrupts.
 " 
 
 # ╔═╡ b1fe04fe-26c7-4cda-b957-e1bbce32b7b2
@@ -80,8 +81,14 @@ md"
 ---
 ##### 2. Sequence of Increasing Complex Bayesian Multivar. Mixture Models
 
+"
+
+# ╔═╡ bee285ac-9388-441a-9299-cc25ecf021af
+md"
+---
 ###### 2.1 Mixed Gaussian Model with Discrete Posterior Latent Membership $k[i]\;;\;i=1,...,N$
 
+The beauty of these results are treacherous because the matrix $\mathbf \mu$ is used twice in the data generating process *and* as a prior in the estimation process. This is only justified as an intermediate step towards the final model where this identy is avoided.
 "
 
 # ╔═╡ 6ede6e55-3d43-41c3-aff7-a53036ae92bd
@@ -109,8 +116,9 @@ let N  = 300
 	#--------------------------------------------------------------------------------
 	@model function bayesianMixtureModel(x)
 		k = Vector{Int64}(undef, N)
+		α = [2.0, 1.0]
 		#----------------------------------------------------------------------------
-		σ2   ~ Gamma(1.0, 1.0)                        # σ2 = variance
+		σ2   ~ Gamma(α...)                            # α is 'splatted'
 		mixtureModel = [MvNormal(μ[:, kk],  σ2 .* I) for kk in 1:K] 
 		#                              ^<=== discrete membership
 		#                             ^==== explicit column vectors
@@ -127,7 +135,7 @@ let N  = 300
 		let nSamples = 100
 			# sampler  = Prior()
 			# sampler = Gibbs(PG(10, :k, :σ2))
-			sampler = Gibbs(PG(10, :k), HMC(0.05, 10, :μ, :σ2))
+			sampler = Gibbs(PG(20, :k), HMC(0.05, 10, :μ, :σ2))
 			sample(model, sampler, nSamples)
 		end # let
 	#--------------------------------------------------------------------------------
@@ -197,9 +205,9 @@ begin
 		k   = Vector{Int64}(undef, N)
 		μ0  = [0.0  0.0;                              # μ1 = [μ1[1], μ1[2]] as priors
 		       0.0  0.0]	 
-		α   = [1.0, 1.0]                              # hyperparameter for Dirichlet
+		α   = [2.0, 1.0]                              # hyperparameter for Dirichlet
 		#----------------------------------------------------------------------------
-		σ2   ~ Gamma(1.0, 1.0)                        # σ2 = variance
+		σ2   ~ Gamma(α...)                            # α is 'splatted'
 		w    ~ Dirichlet(α)
 		for kk in 1:K
 			# sampling priors μ1 = [μ1[1], μ1[2]]
@@ -220,10 +228,10 @@ begin
 	model = bayesianMixtureModel(x)
 	#--------------------------------------------------------------------------------
 	chains = 
-		let nSamples = 100
+		let nSamples = 80
 			# sampler = Prior()
-			sampler = Gibbs(PG(40, :k, :μ, :w, :σ2))          # <========= seems ok
-			# sampler = Gibbs(PG(40, :k), HMC(0.04, 10, :μ, :w, :σ2))
+			# sampler = Gibbs(PG(50, :k, :μ, :w, :σ2))          # <========= seems ok
+			sampler = Gibbs(PG(50, :k), HMC(0.03, 10, :μ, :w, :σ2)) # <= too brittle
 			sample(model, sampler, nSamples)
 		end # let
 	#--------------------------------------------------------------------------------
@@ -2479,6 +2487,7 @@ version = "1.4.1+1"
 # ╟─348f7db7-34a4-4ead-abb2-f6ed469d20fb
 # ╠═1a993c1f-766c-490b-8059-53507a4c8dc5
 # ╟─61e33f1c-86eb-4ccb-b036-f6d9caedbf97
+# ╟─bee285ac-9388-441a-9299-cc25ecf021af
 # ╠═6ede6e55-3d43-41c3-aff7-a53036ae92bd
 # ╟─cb56e40f-fc73-4e84-a97f-967b3bf95f31
 # ╠═d02585c8-0dab-4c35-a7cc-b7c88a9dd242

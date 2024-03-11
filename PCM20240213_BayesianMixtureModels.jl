@@ -19,7 +19,7 @@ md"
 ===================================================================================
 #### [Bayesian Mixture Models](https://turinglang.org/v0.30/tutorials/01-gaussian-mixture-model/)
 ##### file: PCM20240213\_BayesianMixtureModels.jl
-##### Julia/Pluto.jl-code (1.10.1/19.36) by PCM *** 2024/03/10 ***
+##### Julia/Pluto.jl-code (1.10.1/19.36) by PCM *** 2024/03/11 ***
 ===================================================================================
 "
 
@@ -30,11 +30,11 @@ This is a personal *interpretation*, *reconstruction* and *serialization* of the
 In contrast to the original in the Turing.jl tutorial we modified some features:
 
 - *Unconstrained* selection of *generative centroids* in $\mathbf x \in \mathbb R^2$ instead of $\mathbf x \in \mathbb R^1$. This means that we allow $D \cdot K$ parameters $\mu$ in our model instead of only $K$ as in the original model. There generative centroids could only lay on a line of 45 degrees inclination.
-- Increased $N$: we estimate membership parameters $k[i]\;;\; i=1,...,N$ for $N=300$ instead of $N=60$
-- Introduction of a new variance parameter $\sigma^2$ to allow a more flexible variance-covariance matrix $\sigma2 \cdot \mathbf I$. This has three effects. First, the variance of the data generating process need not be known as was the case in the original. Second, we allow varying degrees of cluster overlap in the data. Third, in combination with the parameter vector $\mathbf w$ clusters may have different variance-covarianve matrix $\sigma_{kk}\;;\;kk=1,...,K$.
-- Estimation and display of posterior cluster centroids
-- Cluster-specific mixture weights $w_{kk}\;;\;kk=1,...,K$ to model different attractiveness of clusters. In combination with the variance parameter $\sigma^2$ this makes cluster-specific variances possible.
-- Using the *PG-MCMC*-algorithm for the estimation of *all* parameters. This is due to the brittleness of the originally proposed combined *Gibbs(PG(...), HMC(...))*. The latter often ran into interrupts.
+- *Increasing* $N$: we estimate membership parameters $k[i]\;;\; i=1,...,N$ for $N=500$ instead of $N=60$
+- *Introduction* of a new variance parameter $\sigma^2$ to allow a more flexible variance-covariance matrix $\sigma2 \cdot \mathbf I$. This has three effects. First, the variance of the data generating process need not be known as was the case in the original. Second, we allow varying degrees of cluster overlap in the data. Third, in combination with the parameter vector $\mathbf w$ clusters may have different variance-covarianve matrix $\sigma_{kk}\;;\;kk=1,...,K$.
+- *Estimation* and display of posterior cluster centroids
+- *Combination* of cluster-specific mixture weights $w_{kk}\;;\;kk=1,...,K$ with the variance parameter $\sigma^2$. This models different attractiveness of clusters and cluster-specific variances.
+- *Using* the *PG-MCMC*-algorithm for the estimation of *all* parameters. This is due to the brittleness of the originally proposed combined *Gibbs(PG(...), HMC(...))*. The latter often ran into interrupts.
 " 
 
 # ╔═╡ b1fe04fe-26c7-4cda-b957-e1bbce32b7b2
@@ -48,7 +48,7 @@ md"
 "
 
 # ╔═╡ 1a993c1f-766c-490b-8059-53507a4c8dc5
-let N  = 300
+let N  = 500
 	K  = 2
 	w  = [ 0.6, 0.4]                                 # unequal weight of clusters
 	μ  = [-4.5 +0.5;                                 # unconstrained centroids in R^2
@@ -88,7 +88,7 @@ md"
 ---
 ###### 2.1 Mixed Gaussian Model with Discrete Posterior Latent Membership $k[i]\;;\;i=1,...,N$
 
-The beauty of these results are treacherous because the matrix $\mathbf \mu$ is used twice in the data generating process *and* as a prior in the estimation process. This is only justified as an intermediate step towards the final model where this identy is avoided.
+The beauty of these results are treacherous because the matrix $\mathbf \mu$ is used *twice* in the data generating process *and* as a prior in the estimation process. This is only justified as an intermediate step towards the final model where this identity is avoided.
 "
 
 # ╔═╡ 6ede6e55-3d43-41c3-aff7-a53036ae92bd
@@ -96,7 +96,7 @@ The beauty of these results are treacherous because the matrix $\mathbf \mu$ is 
 # μ[:, k]: here, prior 
 # k[i] are the only *latent* parameters
 #------------------------------------------------------------------------------------
-let N  = 300
+let N  = 500
 	K  = 2
 	D  = 2
 	w  = [ 0.6, 0.4]                                 # unequal weight of clusters
@@ -135,7 +135,7 @@ let N  = 300
 		let nSamples = 100
 			# sampler  = Prior()
 			# sampler = Gibbs(PG(10, :k, :σ2))
-			sampler = Gibbs(PG(20, :k), HMC(0.05, 10, :μ, :σ2))
+			sampler = Gibbs(PG(20, :k), HMC(0.03, 10, :μ, :σ2))
 			sample(model, sampler, nSamples)
 		end # let
 	#--------------------------------------------------------------------------------
@@ -152,7 +152,7 @@ end # let
 # ╔═╡ cb56e40f-fc73-4e84-a97f-967b3bf95f31
 md"
 ---
-###### 2.2 Bayesian Mixed Gaussian Model with Post. Latent Membership $k[i]$ and $\mu[1], \mu[2]$
+###### 2.2 Bayesian Mixed Gaussian Model with Post.Latent Membership $k[i]$, cluster-specific mixture weights $w[kk]$, and centroids $\mu[kk]$
 "
 
 # ╔═╡ d02585c8-0dab-4c35-a7cc-b7c88a9dd242
@@ -160,7 +160,7 @@ begin
 	# ===============================================================================
 	# Data Generation
 	#--------------------------------------------------------------------------------
-	N   = 300
+	N   = 500
 	K   = 2
 	D   = 2
 	w   = [ 0.6, 0.4]                                # unequal weight of clusters
@@ -203,8 +203,8 @@ begin
 		μ0  = Array{Float64}(undef, (D, K))
 		μ   = Array{Float64}(undef, (D, K))
 		k   = Vector{Int64}(undef, N)
-		μ0  = [0.0  0.0;                              # μ1 = [μ1[1], μ1[2]] as priors
-		       0.0  0.0]	 
+		μ0  = [-0.0  +0.0;                            # μ1 = [μ1[1], μ1[2]] as priors
+		       +0.0  -0.0]	 
 		α   = [2.0, 1.0]                              # hyperparameter for Dirichlet
 		#----------------------------------------------------------------------------
 		σ2   ~ Gamma(α...)                            # α is 'splatted'
@@ -231,7 +231,7 @@ begin
 		let nSamples = 80
 			# sampler = Prior()
 			# sampler = Gibbs(PG(50, :k, :μ, :w, :σ2))          # <========= seems ok
-			sampler = Gibbs(PG(50, :k), HMC(0.03, 10, :μ, :w, :σ2)) # <= too brittle
+			sampler = Gibbs(PG(50, :k), HMC(0.03, 10, :μ, :w, :σ2)) # <===== brittle 
 			sample(model, sampler, nSamples)
 		end # let
 	#--------------------------------------------------------------------------------
